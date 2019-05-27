@@ -6,7 +6,7 @@
 /*   By: awoimbee <awoimbee@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2019/05/27 14:36:17 by awoimbee          #+#    #+#             */
-/*   Updated: 2019/05/27 16:51:44 by awoimbee         ###   ########.fr       */
+/*   Updated: 2019/05/27 18:43:00 by awoimbee         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,18 +22,23 @@
 #include <fstream>
 #include <unistd.h>
 
-#define TMP_FILE "onebyone.tmp"
+// #define tmpFile "onebyone.tmp"
 #define MAX_FSIZE (1024 * 1024 * 1024) // 1 gigabyte
 
 #define CORRUPT_NB_CHECKS 100UL
 #define CORRUPT_NB_BYTES 500UL
+
+#define PRINTF_COL	"\033[1;33m"
+#define PRINTF_EOC	"\033[0m"
+
+char	tmpFile[64];
 
 void	quit(
 	const char* errMsg
 ) {
 	if (errMsg)
 		fprintf(stderr, "%s\n", errMsg);
-	std::remove(TMP_FILE);
+	std::remove(tmpFile);
 	fflush(stdout);
 	fflush(stderr);
 	exit(EXIT_FAILURE);
@@ -45,7 +50,7 @@ int		checkRet(
 	if (ret != 0 && ret != 256) {
 		fprintf(stderr,
 			"Child process terminated with return value %d\n"
-			"You can check " TMP_FILE " to investigate the issue\n", ret);
+			"You can check %s to investigate the issue\n", ret, tmpFile);
 			fflush(stdout);
 			fflush(stderr);
 		return (1);
@@ -57,10 +62,17 @@ int		main(
 	int          argc,
 	const char** argv
 ) {
+	bool bytes_check = true;
+	bool rand_check = true;
+
+	/* INIT TMP FILE */
+	srandom(time(NULL));
+	sprintf(tmpFile, "/tmp/%ld.fdestroy.tmp", random());
+
 	/* USAGE */
-	if (argc != 3) {
+	if (argc < 3) {
 		fprintf(stdout,
-			"usage: %s <prog> <input_file> [<args>]\n"
+			"usage: %s [--skip-byte | --skip-rand] <prog> <input_file> [<args>]\n"
 			"\tExemples:\n"
 			"\t\t %s ./corewar ./champ.cor '-dump 5'\n"
 			"\t\t %s './corewar -dump 5' ./champ.cor '-n'\n"
@@ -69,7 +81,18 @@ int		main(
 		return (EXIT_SUCCESS);
 	}
 
-	/* READ INPUT FILE & CREATE TMP_FILE STREAM */
+	if (argc == 4) {
+		if (!strcmp(argv[1], "--skip-byte"))
+			bytes_check = false;
+		else if (!strcmp(argv[1], "--skip-rand"))
+			rand_check = false;
+		else
+			quit("Bad arguments.");
+		memmove(&argv[1], &argv[2], 2 * sizeof(*argv));
+	}
+
+
+	/* READ INPUT FILE & CREATE tmpFile STREAM */
 	int                  fd;
 	size_t               size;
 	std::vector<uint8_t> fileBuff;
@@ -85,7 +108,7 @@ int		main(
 	lseek(fd, 0, SEEK_SET);
 	read(fd, &fileBuff[0], size); //we use read because c++ streams are hard to protect against /dev/*
 	try {
-		out.open(TMP_FILE, std::ios::trunc | std::ios::binary);
+		out.open(tmpFile, std::ios::trunc | std::ios::binary);
 	}
 	catch (std::ios_base::failure& e) {
 		quit(e.what());
@@ -99,43 +122,48 @@ int		main(
 	srandom(time(NULL));
 	cmd.resize(
 		strlen(argv[0])
-		+ strlen(TMP_FILE)
+		+ strlen(tmpFile)
 		+ strlen(argv[2]));
-	sprintf(&cmd[0], "%s %s %s", argv[1], TMP_FILE, argv[3]);
-	printf("Reading the file 1 byte at a time. This will loop %lu times: %s\n",
-		fileBuff.size() - 1,
-		&cmd[0]);
+	sprintf(&cmd[0], "%s %s %s", argv[1], tmpFile, argv[3]);
 
 	/* SAUCE TIME */
 	// pass the file to the selected programm, 1 byte at a time
-	for (size_t i = 0; i < fileBuff.size(); ++i) {
-		out << fileBuff[i];
-		out.flush();
-		fprintf(stdout,
-			"################## Launching with %5lu Bytes ##################\n",
-			i + 1);
-		if (checkRet(system(&cmd[0])))
-			return (0);
-	}
-	// corrupt the file
-	printf("Corrupting the file. This will loop %lu times: %s\n",
-		CORRUPT_NB_BYTES * CORRUPT_NB_CHECKS,
-		&cmd[0]);
-	for (size_t it = 0; it < CORRUPT_NB_CHECKS; ++it) {
-		auto tmpBuff = fileBuff;
-		for (size_t i = 0; i < CORRUPT_NB_BYTES; ++i) {
-			printf("################## loop %5lu ##################\n", CORRUPT_NB_BYTES * it + i);
-			tmpBuff[random() % tmpBuff.size()] = random();
-			out.seekp(0);
-			out.write(
-				reinterpret_cast<const char*>(&tmpBuff[0]),
-				tmpBuff.size());
+	if (bytes_check) {
+		printf(PRINTF_COL "Reading the file 1 byte at a time. This will loop %lu times: %s" PRINTF_EOC "\n",
+			fileBuff.size() - 1,
+			&cmd[0]);
+		for (size_t i = 0; i < fileBuff.size(); ++i) {
+			out << fileBuff[i];
 			out.flush();
+			fprintf(stdout,
+				PRINTF_COL "################## Launching with %5lu Bytes ##################" PRINTF_EOC "\n",
+				i + 1);
 			if (checkRet(system(&cmd[0])))
 				return (0);
 		}
 	}
+	// corrupt the file
+	if (rand_check) {
+		printf("Corrupting the file. This will loop %lu times: %s\n",
+			CORRUPT_NB_BYTES * CORRUPT_NB_CHECKS,
+			&cmd[0]);
+		for (size_t it = 0; it < CORRUPT_NB_CHECKS; ++it) {
+			auto tmpBuff = fileBuff;
+			for (size_t i = 0; i < CORRUPT_NB_BYTES; ++i) {
+				printf(PRINTF_COL "################## loop %5lu ##################" PRINTF_EOC "\n", CORRUPT_NB_BYTES * it + i);
+				tmpBuff[random() % tmpBuff.size()] = random();
+				out.seekp(0);
+				out.write(
+					reinterpret_cast<const char*>(&tmpBuff[0]),
+					tmpBuff.size());
+				out.flush();
+				if (checkRet(system(&cmd[0])))
+					return (0);
+			}
+		}
+	}
 	out.close();
+	std::remove(tmpFile);
 	printf("Test successfull !\n");
 	return (0);
 }
