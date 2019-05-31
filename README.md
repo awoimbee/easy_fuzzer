@@ -1,5 +1,4 @@
 # What is this ?
-### This is inputFileDestroyer
 A simple, single file, quick and dirty project to test the stability of your programs against partial / corrupted input.
 
 ![lem-in](https://i.imgur.com/kDvDdXE.png)
