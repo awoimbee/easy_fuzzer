@@ -6,12 +6,12 @@
 #    By: awoimbee <awoimbee@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2019/05/27 16:31:48 by awoimbee          #+#    #+#              #
-#    Updated: 2019/05/31 11:26:39 by awoimbee         ###   ########.fr        #
+#    Updated: 2019/08/24 16:27:09 by awoimbee         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
 CXX = g++
-CPPFLAGS = -std=c++14 -O3 -Wall -Wextra -Wpedantic
+CPPFLAGS = -std=c++14 -O3 -Wall -Wextra -Wpedantic -Wformat=0
 NAME = fuzzer
 SRCS = fuzzer.cpp
 
